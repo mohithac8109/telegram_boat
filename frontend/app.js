@@ -15,6 +15,8 @@ const closeModal = document.querySelector('.close');
 const phoneInput = document.getElementById('phoneInput');
 const sendOtpBtn = document.getElementById('sendOtpBtn');
 const codeInput = document.getElementById('codeInput');
+const passwordInput = document.getElementById('passwordInput');
+const passwordGroup = document.getElementById('passwordGroup');
 const verifyBtn = document.getElementById('verifyBtn');
 const backBtn = document.getElementById('backBtn');
 const channelInput = document.getElementById('channelInput');
@@ -99,6 +101,8 @@ function showStep(stepId) {
 function resetForm() {
     phoneInput.value = '';
     codeInput.value = '';
+    passwordInput.value = '';
+    passwordGroup.classList.add('hidden');
     document.getElementById('errorMsg').classList.add('hidden');
     document.getElementById('errorMsg').textContent = '';
 }
@@ -138,6 +142,8 @@ async function sendOtp() {
 
 async function verifyCode() {
     const code = codeInput.value.trim();
+    const password = passwordInput.value.trim();
+
     if (!code) {
         showError('Please enter the verification code');
         return;
@@ -147,13 +153,19 @@ async function verifyCode() {
         verifyBtn.disabled = true;
         verifyBtn.textContent = 'Verifying...';
 
+        const payload = {
+            phone: currentPhone,
+            code: code,
+        };
+
+        if (password) {
+            payload.password = password;
+        }
+
         const response = await fetch(`${API_URL}/login/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: currentPhone,
-                code: code
-            })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
@@ -163,7 +175,8 @@ async function verifyCode() {
                 `Welcome, ${data.user.first_name}!`;
             showStep('successStep');
         } else if (data.requires_password) {
-            showError('2FA password required (not yet supported)');
+            passwordGroup.classList.remove('hidden');
+            showError('This account requires a 2FA password. Please enter it and verify again.');
         } else {
             showError(data.detail || 'Verification failed');
         }

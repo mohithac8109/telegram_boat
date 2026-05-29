@@ -239,7 +239,18 @@ async def verify_login(request: LoginVerifyRequest):
     client = clients[phone]
 
     try:
-        await client.sign_in(phone=phone, code=request.code)
+        try:
+            if request.password:
+                await client.sign_in(phone=phone, code=request.code, password=request.password)
+            else:
+                await client.sign_in(phone=phone, code=request.code)
+        except SessionPasswordNeededError:
+            return {
+                "success": False,
+                "requires_password": True,
+                "phone": phone,
+                "message": "2FA password required"
+            }
 
         if await client.is_user_authorized():
             me = await client.get_me()
@@ -263,12 +274,30 @@ async def verify_login(request: LoginVerifyRequest):
         )
 
     except SessionPasswordNeededError:
-        return {
-            "success": False,
-            "requires_password": True,
-            "phone": phone,
-            "message": "2FA password required"
-        }
+        try:
+            await client.sign_in(password=request.password)
+
+            if await client.is_user_authorized():
+                me = await client.get_me()
+                await client.disconnect()
+                clients.pop(phone, None)
+
+                return {
+                    "success": True,
+                    "phone": phone,
+                    "user": {
+                        "first_name": me.first_name,
+                        "last_name": me.last_name,
+                        "username": me.username,
+                    },
+                    "message": "Login successful"
+                }
+            raise HTTPException(
+                status_code=400,
+                detail="Login failed"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
