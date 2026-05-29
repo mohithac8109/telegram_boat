@@ -74,12 +74,18 @@ async def download_worker(
 ):
     """Background worker for downloads"""
     try:
+        print("=" * 50)
+        print("WORKER STARTED")
+        print("JOB:", job_id)
+        print("CHANNEL:", channel)
+        print("=" * 50)
+
         jobs[job_id]["status"] = "scanning"
 
         downloader = TelegramDownloader(
             client=client,
             download_dir=DOWNLOAD_DIR,
-            concurrent_workers=3,
+            concurrent_workers=1,
         )
 
         def progress_update(progress_data: Dict):
@@ -97,6 +103,13 @@ async def download_worker(
         jobs[job_id]["stats"] = result.get("stats", {})
 
     except Exception as e:
+        import traceback
+
+        print("=" * 50)
+        print("DOWNLOAD ERROR")
+        traceback.print_exc()
+        print("=" * 50)
+
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
 
@@ -134,16 +147,25 @@ async def get_accounts():
     }
 @app.post("/api/login")
 async def login(request: LoginRequest):
+    import asyncio
+    from telethon.errors import AuthRestartError
+
     phone = request.phone.strip()
 
     if not phone.startswith("+"):
         phone = "+" + phone
 
+    # Prevent multiple OTP requests - clean up old session
+    if phone in clients:
+        try:
+            await clients[phone].disconnect()
+        except:
+            pass
+        clients.pop(phone, None)
+
     session_path = os.path.join(SESSIONS_DIR, phone)
 
     try:
-        from telethon.errors import AuthRestartError
-
         client = TelegramClient(
             session_path,
             API_ID,
@@ -152,16 +174,14 @@ async def login(request: LoginRequest):
             retry_delay=2,
         )
 
-        await client.connect()
-
-        if not client.is_connected():
-            await client.connect()
-
         try:
+            if not client.is_connected():
+                await client.connect()
+
             await client.send_code_request(phone)
 
         except AuthRestartError:
-            print("AuthRestartError: restarting authorization")
+            print("Telegram requested auth restart")
 
             await client.disconnect()
 
@@ -175,8 +195,7 @@ async def login(request: LoginRequest):
 
             await client.connect()
 
-            if not client.is_connected():
-                await client.connect()
+            await asyncio.sleep(2)
 
             await client.send_code_request(phone)
 
@@ -222,7 +241,7 @@ async def verify_login(request: LoginVerifyRequest):
     try:
         await client.sign_in(phone=phone, code=request.code)
 
-        if client.is_user_authorized():
+        if await client.is_user_authorized():
             me = await client.get_me()
             await client.disconnect()
             clients.pop(phone, None)
