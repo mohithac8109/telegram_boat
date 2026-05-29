@@ -102,7 +102,6 @@ async def download_worker(
     session_path = os.path.join(SESSIONS_DIR, phone)
     download_root = os.path.join(DOWNLOAD_DIR, phone.lstrip("+"))
     lock = get_session_lock(phone)
-
     try:
         async with lock:
             print("=" * 50)
@@ -718,19 +717,36 @@ def debug_storage():
 
 @app.get("/debug/tree")
 def debug_tree():
+    import os
+
+    matches = []
+
+    for root, dirs, files in os.walk("."):
+        if "download" in root.lower():
+            matches.append(root)
+
+    return {
+        "cwd": os.getcwd(),
+        "matches": matches
+    }
+
+
+@app.get("/files")
+def list_files():
     files = []
-    for root, dirs, filenames in os.walk("."):
-        if "downloads" in root:
-            files.append(root)
-    return {"paths": files}
+
+    for root, dirs, filenames in os.walk("/app/backend/downloads"):
+        for filename in filenames:
+            files.append(os.path.join(root, filename))
+
+    return files
 
 
-if __name__ == "__main__":
-    import uvicorn
+@app.get("/download-file")
+def download_file(filename: str):
+    path = os.path.join("/app/backend/downloads", filename)
 
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
+    if os.path.exists(path):
+        return FileResponse(path)
+
+    return {"error": "File not found"}
