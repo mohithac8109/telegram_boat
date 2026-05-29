@@ -238,6 +238,15 @@ async function pollDownloadStatus() {
 
     try {
         const response = await fetch(`${API_URL}/download/status/${currentJobId}`);
+        
+        // Handle old job IDs (404)
+        if (response.status === 404) {
+            localStorage.removeItem("currentJobId");
+            currentJobId = null;
+            console.log("Job ID not found - clearing from storage");
+            return;
+        }
+
         const data = await response.json();
 
         if (data.status === 'scanning') {
