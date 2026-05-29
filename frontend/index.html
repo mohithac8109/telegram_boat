@@ -96,8 +96,19 @@
                     </div>
                 </div>
 
-                <button id="startDownloadBtn" class="btn btn-success">Start Download</button>
+                <button id="scanChannelBtn" class="btn btn-primary">Scan Channel</button>
                 <button id="downloadZipBtn" class="btn btn-secondary">Download Videos ZIP</button>
+            </section>
+
+            <!-- Selection Section -->
+            <section class="card" id="selectionSection" style="display: none;">
+                <h2>Select Media</h2>
+                <div class="selection-actions">
+                    <button id="downloadSelectedBtn" class="btn btn-success">Download Selected</button>
+                    <button id="downloadAllBtn" class="btn btn-secondary">Download All</button>
+                </div>
+                <div id="selectionInfo" class="selection-info"></div>
+                <div id="selectionList" class="selection-list"></div>
             </section>
 
             <!-- Progress Section -->

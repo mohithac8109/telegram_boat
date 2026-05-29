@@ -24,7 +24,7 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
 from backend.config import API_ID, API_HASH, SESSIONS_DIR, DOWNLOAD_DIR
-from backend.downloader import TelegramDownloader, media_label
+from backend.downloader import TelegramDownloader, media_label, media_matches, get_media_type
 app = FastAPI(title="Telegram Media Downloader API", version="1.0.0")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -68,6 +68,7 @@ class DownloadRequest(BaseModel):
     phone: str
     channel: str
     download_type: str  # "1", "2", "3", "4", "5"
+    message_ids: Optional[List[int]] = None
 
 
 # Utility Functions
@@ -95,6 +96,7 @@ async def download_worker(
     phone: str,
     channel: str,
     choice: str,
+    message_ids: Optional[List[int]] = None,
 ):
     """Background worker for downloads"""
     session_path = os.path.join(SESSIONS_DIR, phone)
@@ -133,11 +135,13 @@ async def download_worker(
 
                 def progress_update(progress_data: Dict):
                     if job_id in jobs:
+                        jobs[job_id]["status"] = "downloading"
                         jobs[job_id]["progress"] = progress_data
 
                 result = await downloader.download_channel(
                     channel=channel,
                     choice=choice,
+                    message_ids=message_ids,
                     progress_callback=progress_update,
                 )
 
@@ -194,6 +198,70 @@ async def get_accounts():
         "accounts": accounts,
         "count": len(accounts),
     }
+
+
+@app.get("/api/channel/media")
+async def get_channel_media(phone: str, channel: str, download_type: str = "5"):
+    """List matching media items in a channel for selection."""
+    if not phone.startswith("+"):
+        phone = "+" + phone
+
+    session_path = os.path.join(SESSIONS_DIR, phone)
+    if not os.path.exists(session_path + ".session"):
+        raise HTTPException(
+            status_code=401,
+            detail="Account not logged in"
+        )
+
+    lock = get_session_lock(phone)
+    async with lock:
+        client = TelegramClient(
+            session_path,
+            API_ID,
+            API_HASH,
+            connection_retries=10,
+            retry_delay=2,
+        )
+
+        try:
+            await client.connect()
+            if not await client.is_user_authorized():
+                raise HTTPException(
+                    status_code=401,
+                    detail="Session expired. Please login again."
+                )
+
+            entity = await client.get_entity(channel)
+            items = []
+            async for message in client.iter_messages(entity):
+                if media_matches(message, download_type):
+                    media_type = get_media_type(message)
+                    size = 0
+                    if getattr(message, 'file', None):
+                        size = message.file.size or 0
+                    items.append({
+                        'id': message.id,
+                        'date': message.date.isoformat() if getattr(message, 'date', None) else None,
+                        'type': media_type,
+                        'size': size,
+                        'caption': (getattr(message, 'message', '') or '')[:200],
+                    })
+
+            return {
+                'success': True,
+                'channel': channel,
+                'download_type': download_type,
+                'items': items,
+                'total_items': len(items),
+            }
+
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+
+
 @app.post("/api/login")
 async def login(request: LoginRequest):
     from telethon.errors import AuthRestartError
@@ -490,6 +558,7 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
             phone,
             request.channel,
             request.download_type,
+            request.message_ids,
         )
 
         return {

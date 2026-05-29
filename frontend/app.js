@@ -21,11 +21,19 @@ const verifyBtn = document.getElementById('verifyBtn');
 const backBtn = document.getElementById('backBtn');
 const channelInput = document.getElementById('channelInput');
 const startDownloadBtn = document.getElementById('startDownloadBtn');
+const scanChannelBtn = document.getElementById('scanChannelBtn');
 const downloadZipBtn = document.getElementById('downloadZipBtn');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
 const newDownloadBtn = document.getElementById('newDownloadBtn');
 
 // Sections
 const accountSection = document.getElementById('accountSection');
+const selectionSection = document.getElementById('selectionSection');
+const selectionList = document.getElementById('selectionList');
+const selectionInfo = document.getElementById('selectionInfo');
+
+let selectionItems = [];
 const downloadSection = document.getElementById('downloadSection');
 const progressSection = document.getElementById('progressSection');
 const summarySection = document.getElementById('summarySection');
@@ -48,7 +56,10 @@ function attachEventListeners() {
     backBtn.addEventListener('click', backToPhone);
     accountSelect.addEventListener('change', selectAccount);
     startDownloadBtn.addEventListener('click', startDownload);
+    scanChannelBtn.addEventListener('click', scanChannel);
     downloadZipBtn.addEventListener('click', downloadZip);
+    downloadSelectedBtn.addEventListener('click', downloadSelected);
+    downloadAllBtn.addEventListener('click', downloadAll);
     newDownloadBtn.addEventListener('click', () => {
         downloadSection.style.display = 'block';
         progressSection.style.display = 'none';
@@ -206,7 +217,7 @@ function showError(message) {
 }
 
 // Download Functions
-async function startDownload() {
+async function startDownload(messageIds = null) {
     const channel = channelInput.value.trim();
     const downloadType = document.querySelector('input[name="downloadType"]:checked').value;
 
@@ -218,15 +229,22 @@ async function startDownload() {
     try {
         startDownloadBtn.disabled = true;
         startDownloadBtn.textContent = 'Starting...';
+        downloadSelectedBtn.disabled = true;
+        downloadAllBtn.disabled = true;
+
+        const payload = {
+            phone: currentPhone,
+            channel: channel,
+            download_type: downloadType,
+        };
+        if (Array.isArray(messageIds)) {
+            payload.message_ids = messageIds;
+        }
 
         const response = await fetch(`${API_URL}/download`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: currentPhone,
-                channel: channel,
-                download_type: downloadType
-            })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
@@ -234,6 +252,7 @@ async function startDownload() {
         if (response.ok) {
             currentJobId = data.job_id;
             downloadSection.style.display = 'none';
+            selectionSection.style.display = 'none';
             progressSection.style.display = 'block';
             summarySection.style.display = 'none';
             pollDownloadStatus();
@@ -245,7 +264,107 @@ async function startDownload() {
     } finally {
         startDownloadBtn.disabled = false;
         startDownloadBtn.textContent = 'Start Download';
+        downloadSelectedBtn.disabled = false;
+        downloadAllBtn.disabled = false;
     }
+}
+
+async function scanChannel() {
+    const channel = channelInput.value.trim();
+    const downloadType = document.querySelector('input[name="downloadType"]:checked').value;
+
+    if (!channel) {
+        alert('Please enter a channel name or link');
+        return;
+    }
+
+    if (!currentPhone) {
+        alert('Please select an account first');
+        return;
+    }
+
+    scanChannelBtn.disabled = true;
+    scanChannelBtn.textContent = 'Scanning...';
+    selectionSection.style.display = 'block';
+    selectionInfo.textContent = 'Scanning channel. This may take a moment...';
+    selectionList.innerHTML = '';
+    selectionItems = [];
+
+    try {
+        const response = await fetch(`${API_URL}/channel/media?phone=${encodeURIComponent(currentPhone)}&channel=${encodeURIComponent(channel)}&download_type=${encodeURIComponent(downloadType)}`);
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            selectionItems = data.items;
+            if (selectionItems.length === 0) {
+                selectionInfo.textContent = 'No matching media found in this channel.';
+                return;
+            }
+            renderSelectionList(selectionItems);
+            selectionInfo.textContent = `Found ${selectionItems.length} items. Select files to download or download all.`;
+        } else {
+            selectionInfo.textContent = data.detail || 'Failed to scan channel.';
+        }
+    } catch (error) {
+        selectionInfo.textContent = 'Error scanning channel: ' + error.message;
+    } finally {
+        scanChannelBtn.disabled = false;
+        scanChannelBtn.textContent = 'Scan Channel';
+    }
+}
+
+function renderSelectionList(items) {
+    if (!items.length) {
+        selectionList.innerHTML = '<p>No media items found.</p>';
+        return;
+    }
+
+    selectionList.innerHTML = items.map(item => `
+        <label class="selection-item">
+            <input type="checkbox" class="selection-checkbox" value="${item.id}" checked>
+            <div class="selection-details">
+                <span class="selection-title">${item.type.toUpperCase()} #${item.id}</span>
+                <span class="selection-meta">${item.date || 'Unknown date'} · ${formatBytes(item.size)}${item.caption ? ' · ' + escapeHtml(item.caption) : ''}</span>
+            </div>
+        </label>
+    `).join('');
+}
+
+function downloadSelected() {
+    const checked = Array.from(document.querySelectorAll('.selection-checkbox:checked'));
+    if (!checked.length) {
+        alert('Please select at least one item to download.');
+        return;
+    }
+
+    const ids = checked.map(input => Number(input.value));
+    startDownload(ids);
+}
+
+function downloadAll() {
+    if (!selectionItems.length) {
+        alert('No scanned items to download. Please scan the channel first.');
+        return;
+    }
+
+    const allIds = selectionItems.map(item => item.id);
+    startDownload(allIds);
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const index = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, index)).toFixed(2)} ${units[index]}`;
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function downloadZip() {

@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 import time
-from typing import Dict, Optional, Callable
+from typing import Dict, List, Optional, Callable
 from telethon import TelegramClient
 from telethon.errors import ChannelInvalidError
 
@@ -212,6 +212,7 @@ class TelegramDownloader:
         self,
         channel: str,
         choice: str,
+        message_ids: Optional[List[int]] = None,
         progress_callback: Optional[Callable] = None,
     ) -> Dict:
         """
@@ -309,18 +310,29 @@ class TelegramDownloader:
             asyncio.create_task(worker(0))
         ]
 
-        item_index = 0
-        async for message in self.client.iter_messages(entity):
-            if media_matches(message, choice):
+        if message_ids:
+            messages = await self.client.get_messages(entity, ids=message_ids)
+            valid_messages = [m for m in messages if m and media_matches(m, choice)]
+            item_index = 0
+            for message in valid_messages:
                 item_index += 1
                 total_matches += 1
-                
-                if item_index % 100 == 0:
-                    print(f"FOUND {item_index} MATCHING FILES")
-                
                 await queue.put((message, item_index))
 
-        print(f"STEP 6 - SCAN COMPLETE. FOUND {item_index} FILES")
+            print(f"STEP 6 - SELECTED ITEMS QUEUED. FOUND {item_index} MATCHING FILES")
+        else:
+            item_index = 0
+            async for message in self.client.iter_messages(entity):
+                if media_matches(message, choice):
+                    item_index += 1
+                    total_matches += 1
+                    
+                    if item_index % 100 == 0:
+                        print(f"FOUND {item_index} MATCHING FILES")
+                    
+                    await queue.put((message, item_index))
+
+            print(f"STEP 6 - SCAN COMPLETE. FOUND {item_index} FILES")
         
         for _ in workers:
             await queue.put(None)
