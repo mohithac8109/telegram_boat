@@ -133,10 +133,8 @@ async def get_accounts():
         "count": len(accounts),
     }
 
-
 @app.post("/api/login")
 async def login(request: LoginRequest):
-    """Request OTP for Telegram login"""
     phone = request.phone.strip()
 
     if not phone.startswith("+"):
@@ -145,32 +143,38 @@ async def login(request: LoginRequest):
     session_path = os.path.join(SESSIONS_DIR, phone)
 
     try:
-        client = TelegramClient(session_path, API_ID, API_HASH)
-        await client.connect()
-
-        (phone_registered, account_exists) = (
-            await client.is_phone_registered()
+        client = TelegramClient(
+            session_path,
+            API_ID,
+            API_HASH
         )
 
-        if not phone_registered:
-            await client.disconnect()
-            raise HTTPException(
-                status_code=400,
-                detail="Phone number not registered on Telegram"
-            )
+        await client.connect()
 
-        sent_code = await client.send_code_request(phone)
+        await client.send_code_request(phone)
+
         clients[phone] = client
 
         return {
             "success": True,
             "phone": phone,
-            "message": "OTP sent to Telegram app",
+            "message": "OTP sent successfully"
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import traceback
 
+        print("\n" + "=" * 60)
+        print("LOGIN ERROR")
+        print("TYPE:", type(e).__name__)
+        print("ERROR:", str(e))
+        traceback.print_exc()
+        print("=" * 60 + "\n")
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"{type(e).__name__}: {str(e)}"
+        )
 
 @app.post("/api/login/verify")
 async def verify_login(request: LoginVerifyRequest):
