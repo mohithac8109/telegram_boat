@@ -99,6 +99,7 @@ function selectAccount() {
     currentPhone = accountSelect.value;
     if (currentPhone) {
         downloadSection.style.display = 'block';
+        loadHistory();
     } else {
         downloadSection.style.display = 'none';
     }
@@ -347,11 +348,21 @@ function renderSelectionList(items) {
         return;
     }
 
+    const typeLabel = (type) => {
+        switch (type) {
+            case 'video': return '🎥 Video';
+            case 'photo': return '📷 Photo';
+            case 'document': return '📄 Document';
+            case 'audio': return '🎵 Audio';
+            default: return type ? type.toUpperCase() : 'FILE';
+        }
+    };
+
     selectionList.innerHTML = items.map(item => `
         <label class="selection-item">
             <input type="checkbox" class="selection-checkbox" value="${item.id}" checked>
             <div class="selection-details">
-                <span class="selection-title">${item.type.toUpperCase()} #${item.id}</span>
+                <span class="selection-title">${typeLabel(item.type)} #${item.id}</span>
                 <span class="selection-meta">${item.date || 'Unknown date'} · ${formatBytes(item.size)}${item.caption ? ' · ' + escapeHtml(item.caption) : ''}</span>
             </div>
         </label>
@@ -443,6 +454,34 @@ function downloadZipAfter() {
     triggerZipDownload(currentChannel || channelInput.value, downloadZipBtn);
 }
 
+async function loadHistory() {
+    if (!currentPhone) return;
+
+    try {
+        const response = await fetch(`/api/history/${encodeURIComponent(currentPhone)}`);
+        const data = await response.json();
+        const container = document.getElementById('historyList');
+        container.innerHTML = '';
+
+        if (!data || !data.channels || data.channels.length === 0) {
+            container.innerHTML = '<p class="hint">No downloads found for this account.</p>';
+            return;
+        }
+
+        data.channels.forEach(channel => {
+            container.innerHTML += `
+                <div class="history-card">
+                    <h4>${channel.name}</h4>
+                    <p>${channel.files} files</p>
+                    <p>${channel.size_mb} MB</p>
+                </div>
+            `;
+        });
+    } catch (error) {
+        console.error('Failed to load history', error);
+    }
+}
+
 async function pollDownloadStatus() {
     if (!currentJobId) return;
 
@@ -518,5 +557,9 @@ function completeDownload(stats) {
     if (downloadZipBtn) {
         downloadZipBtn.disabled = false;
         downloadZipBtn.textContent = 'Download ZIP';
+        downloadZipBtn.style.display = 'block';
     }
+
+    // refresh history for the selected account
+    loadHistory();
 }

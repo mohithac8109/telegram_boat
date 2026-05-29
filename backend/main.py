@@ -201,6 +201,66 @@ async def get_accounts():
     }
 
 
+@app.get("/api/history/{phone}")
+async def get_history(phone: str):
+    if not phone.startswith("+"):
+        phone = "+" + phone
+
+    user_folder = os.path.join(
+        DOWNLOAD_DIR,
+        phone.lstrip("+")
+    )
+
+    if not os.path.exists(user_folder):
+        return {
+            "success": True,
+            "channels": []
+        }
+
+    channels = []
+
+    for folder in os.listdir(user_folder):
+
+        folder_path = os.path.join(
+            user_folder,
+            folder
+        )
+
+        if not os.path.isdir(folder_path):
+            continue
+
+        file_count = 0
+        total_size = 0
+
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+
+                if file == "downloaded_ids.json":
+                    continue
+
+                path = os.path.join(
+                    root,
+                    file
+                )
+
+                file_count += 1
+                total_size += os.path.getsize(path)
+
+        channels.append({
+            "name": folder,
+            "files": file_count,
+            "size_mb": round(
+                total_size / 1024 / 1024,
+                2
+            )
+        })
+
+    return {
+        "success": True,
+        "channels": channels
+    }
+
+
 @app.get("/api/channel/media")
 async def get_channel_media(phone: str, channel: str, download_type: str = "5"):
     """List matching media items in a channel for selection."""
@@ -234,8 +294,11 @@ async def get_channel_media(phone: str, channel: str, download_type: str = "5"):
 
             entity = await client.get_entity(channel)
             items = []
+            count = 0
             async for message in client.iter_messages(entity):
                 if media_matches(message, download_type):
+                    if count >= 500:
+                        break
                     media_type = get_media_type(message)
                     size = 0
                     if getattr(message, 'file', None):
@@ -247,6 +310,7 @@ async def get_channel_media(phone: str, channel: str, download_type: str = "5"):
                         'size': size,
                         'caption': (getattr(message, 'message', '') or '')[:200],
                     })
+                    count += 1
 
             return {
                 'success': True,
