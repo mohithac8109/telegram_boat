@@ -18,7 +18,7 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
 from backend.config import API_ID, API_HASH, SESSIONS_DIR, DOWNLOAD_DIR
-from downloader import TelegramDownloader, media_label
+from backend.config import API_ID, API_HASH, SESSIONS_DIR, DOWNLOAD_DIR
 
 app = FastAPI(title="Telegram Media Downloader API", version="1.0.0")
 
