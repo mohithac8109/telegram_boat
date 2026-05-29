@@ -172,6 +172,9 @@ class TelegramDownloader:
         tracker = DownloadProgressTracker(progress_callback)
 
         try:
+            if not self.client.is_connected():
+                await self.client.connect()
+
             await self.client.download_media(
                 message,
                 file=channel_folder,
@@ -197,7 +200,12 @@ class TelegramDownloader:
 
             return True
         except Exception as e:
-            print(f"Error downloading message {message.id}: {e}")
+            print(
+                f"DOWNLOAD FAILED "
+                f"Message ID {message.id}"
+            )
+            print(type(e).__name__)
+            print(str(e))
             return False
 
     async def download_channel(
@@ -298,8 +306,7 @@ class TelegramDownloader:
                 queue.task_done()
 
         workers = [
-            asyncio.create_task(worker(i))
-            for i in range(self.concurrent_workers)
+            asyncio.create_task(worker(0))
         ]
 
         item_index = 0
