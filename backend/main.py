@@ -18,7 +18,7 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
 from backend.config import API_ID, API_HASH, SESSIONS_DIR, DOWNLOAD_DIR
-
+from backend.downloader import TelegramDownloader, media_label
 app = FastAPI(title="Telegram Media Downloader API", version="1.0.0")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -132,7 +132,6 @@ async def get_accounts():
         "accounts": accounts,
         "count": len(accounts),
     }
-
 @app.post("/api/login")
 async def login(request: LoginRequest):
     phone = request.phone.strip()
@@ -143,15 +142,43 @@ async def login(request: LoginRequest):
     session_path = os.path.join(SESSIONS_DIR, phone)
 
     try:
+        from telethon.errors import AuthRestartError
+
         client = TelegramClient(
             session_path,
             API_ID,
-            API_HASH
+            API_HASH,
+            connection_retries=10,
+            retry_delay=2,
         )
 
         await client.connect()
 
-        await client.send_code_request(phone)
+        if not client.is_connected():
+            await client.connect()
+
+        try:
+            await client.send_code_request(phone)
+
+        except AuthRestartError:
+            print("AuthRestartError: restarting authorization")
+
+            await client.disconnect()
+
+            client = TelegramClient(
+                session_path,
+                API_ID,
+                API_HASH,
+                connection_retries=10,
+                retry_delay=2,
+            )
+
+            await client.connect()
+
+            if not client.is_connected():
+                await client.connect()
+
+            await client.send_code_request(phone)
 
         clients[phone] = client
 
@@ -261,7 +288,13 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
     }
 
     try:
-        client = TelegramClient(session_path, API_ID, API_HASH)
+        client = TelegramClient(
+            session_path,
+            API_ID,
+            API_HASH,
+            connection_retries=10,
+            retry_delay=2,
+        )
         await client.connect()
 
         if not await client.is_user_authorized():
