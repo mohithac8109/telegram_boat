@@ -26,6 +26,7 @@ const downloadZipBtn = document.getElementById('downloadZipBtn');
 const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
 const downloadAllBtn = document.getElementById('downloadAllBtn');
 const newDownloadBtn = document.getElementById('newDownloadBtn');
+const selectAllCheckbox = document.getElementById('selectAllCheckbox');
 
 // Sections
 const accountSection = document.getElementById('accountSection');
@@ -34,6 +35,8 @@ const selectionList = document.getElementById('selectionList');
 const selectionInfo = document.getElementById('selectionInfo');
 
 let selectionItems = [];
+let currentChannel = null;
+let currentDownloadType = '5';
 const downloadSection = document.getElementById('downloadSection');
 const progressSection = document.getElementById('progressSection');
 const summarySection = document.getElementById('summarySection');
@@ -55,16 +58,22 @@ function attachEventListeners() {
     verifyBtn.addEventListener('click', verifyCode);
     backBtn.addEventListener('click', backToPhone);
     accountSelect.addEventListener('change', selectAccount);
-    startDownloadBtn.addEventListener('click', startDownload);
     scanChannelBtn.addEventListener('click', scanChannel);
-    downloadZipBtn.addEventListener('click', downloadZip);
+    if (downloadZipBtn) downloadZipBtn.addEventListener('click', downloadZipAfter);
     downloadSelectedBtn.addEventListener('click', downloadSelected);
     downloadAllBtn.addEventListener('click', downloadAll);
+    if (selectAllCheckbox) selectAllCheckbox.addEventListener('change', toggleSelectAll);
     newDownloadBtn.addEventListener('click', () => {
         downloadSection.style.display = 'block';
+        selectionSection.style.display = 'none';
         progressSection.style.display = 'none';
         summarySection.style.display = 'none';
         channelInput.value = '';
+        selectionItems = [];
+        currentChannel = null;
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = false;
+        }
     });
 }
 
@@ -227,10 +236,13 @@ async function startDownload(messageIds = null) {
     }
 
     try {
-        startDownloadBtn.disabled = true;
-        startDownloadBtn.textContent = 'Starting...';
+        if (startDownloadBtn) {
+            startDownloadBtn.disabled = true;
+            startDownloadBtn.textContent = 'Starting...';
+        }
         downloadSelectedBtn.disabled = true;
         downloadAllBtn.disabled = true;
+        if (downloadZipBtn) downloadZipBtn.disabled = true;
 
         const payload = {
             phone: currentPhone,
@@ -262,10 +274,13 @@ async function startDownload(messageIds = null) {
     } catch (error) {
         alert('Error: ' + error.message);
     } finally {
-        startDownloadBtn.disabled = false;
-        startDownloadBtn.textContent = 'Start Download';
+        if (startDownloadBtn) {
+            startDownloadBtn.disabled = false;
+            startDownloadBtn.textContent = 'Start Download';
+        }
         downloadSelectedBtn.disabled = false;
         downloadAllBtn.disabled = false;
+        if (downloadZipBtn) downloadZipBtn.disabled = false;
     }
 }
 
@@ -285,10 +300,16 @@ async function scanChannel() {
 
     scanChannelBtn.disabled = true;
     scanChannelBtn.textContent = 'Scanning...';
+    currentChannel = channel;
+    currentDownloadType = downloadType;
+    downloadSection.style.display = 'none';
     selectionSection.style.display = 'block';
     selectionInfo.textContent = 'Scanning channel. This may take a moment...';
     selectionList.innerHTML = '';
     selectionItems = [];
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+    }
 
     try {
         const response = await fetch(`${API_URL}/channel/media?phone=${encodeURIComponent(currentPhone)}&channel=${encodeURIComponent(channel)}&download_type=${encodeURIComponent(downloadType)}`);
@@ -298,15 +319,22 @@ async function scanChannel() {
             selectionItems = data.items;
             if (selectionItems.length === 0) {
                 selectionInfo.textContent = 'No matching media found in this channel.';
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = false;
+                }
                 return;
             }
             renderSelectionList(selectionItems);
             selectionInfo.textContent = `Found ${selectionItems.length} items. Select files to download or download all.`;
         } else {
             selectionInfo.textContent = data.detail || 'Failed to scan channel.';
+            downloadSection.style.display = 'block';
+            selectionSection.style.display = 'none';
         }
     } catch (error) {
         selectionInfo.textContent = 'Error scanning channel: ' + error.message;
+        downloadSection.style.display = 'block';
+        selectionSection.style.display = 'none';
     } finally {
         scanChannelBtn.disabled = false;
         scanChannelBtn.textContent = 'Scan Channel';
@@ -328,6 +356,17 @@ function renderSelectionList(items) {
             </div>
         </label>
     `).join('');
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = true;
+    }
+}
+
+function toggleSelectAll() {
+    const checked = Boolean(selectAllCheckbox && selectAllCheckbox.checked);
+    document.querySelectorAll('.selection-checkbox').forEach(checkbox => {
+        checkbox.checked = checked;
+    });
 }
 
 function downloadSelected() {
@@ -367,10 +406,10 @@ function escapeHtml(text) {
         .replace(/'/g, '&#039;');
 }
 
-function downloadZip() {
-    const channel = channelInput.value.trim();
+function triggerZipDownload(channel, buttonElement) {
+    const normalizedChannel = (channel || '').trim();
 
-    if (!channel) {
+    if (!normalizedChannel) {
         alert('Please enter a channel name or link');
         return;
     }
@@ -380,16 +419,28 @@ function downloadZip() {
         return;
     }
 
-    downloadZipBtn.disabled = true;
-    downloadZipBtn.textContent = 'Preparing ZIP...';
+    if (buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.textContent = 'Preparing ZIP...';
+    }
 
-    const zipUrl = `${API_URL}/download/zip?phone=${encodeURIComponent(currentPhone)}&channel=${encodeURIComponent(channel)}`;
+    const zipUrl = `${API_URL}/download/zip?phone=${encodeURIComponent(currentPhone)}&channel=${encodeURIComponent(normalizedChannel)}`;
     window.location.href = zipUrl;
 
     setTimeout(() => {
-        downloadZipBtn.disabled = false;
-        downloadZipBtn.textContent = 'Download Videos ZIP';
+        if (buttonElement) {
+            buttonElement.disabled = false;
+            buttonElement.textContent = 'Download ZIP';
+        }
     }, 1000);
+}
+
+function downloadZip() {
+    triggerZipDownload(channelInput.value, downloadZipBtn);
+}
+
+function downloadZipAfter() {
+    triggerZipDownload(currentChannel || channelInput.value, downloadZipBtn);
 }
 
 async function pollDownloadStatus() {
@@ -463,4 +514,9 @@ function completeDownload(stats) {
 
     document.getElementById('downloadPath').innerHTML =
         `<strong>Saved To:</strong> ${stats.channel_folder}`;
+
+    if (downloadZipBtn) {
+        downloadZipBtn.disabled = false;
+        downloadZipBtn.textContent = 'Download ZIP';
+    }
 }

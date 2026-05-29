@@ -96,13 +96,18 @@
                     </div>
                 </div>
 
-                <button id="scanChannelBtn" class="btn btn-primary">Scan Channel</button>
-                <button id="downloadZipBtn" class="btn btn-secondary">Download Videos ZIP</button>
+                <button id="scanChannelBtn" class="btn btn-primary">Continue</button>
             </section>
 
             <!-- Selection Section -->
             <section class="card" id="selectionSection" style="display: none;">
                 <h2>Select Media</h2>
+                <div class="selection-header">
+                    <label class="select-all-label">
+                        <input type="checkbox" id="selectAllCheckbox">
+                        <span>Select All</span>
+                    </label>
+                </div>
                 <div class="selection-actions">
                     <button id="downloadSelectedBtn" class="btn btn-success">Download Selected</button>
                     <button id="downloadAllBtn" class="btn btn-secondary">Download All</button>
@@ -181,7 +186,10 @@
 
                 <div id="downloadPath" class="download-path"></div>
 
-                <button id="newDownloadBtn" class="btn btn-primary">New Download</button>
+                <div class="summary-actions">
+                    <button id="downloadZipBtn" class="btn btn-secondary">Download ZIP</button>
+                    <button id="newDownloadBtn" class="btn btn-primary">New Download</button>
+                </div>
             </section>
         </main>
 

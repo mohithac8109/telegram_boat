@@ -100,6 +100,7 @@ async def download_worker(
 ):
     """Background worker for downloads"""
     session_path = os.path.join(SESSIONS_DIR, phone)
+    download_root = os.path.join(DOWNLOAD_DIR, phone.lstrip("+"))
     lock = get_session_lock(phone)
 
     try:
@@ -129,7 +130,7 @@ async def download_worker(
 
                 downloader = TelegramDownloader(
                     client=client,
-                    download_dir=DOWNLOAD_DIR,
+                    download_dir=download_root,
                     concurrent_workers=1,
                 )
 
@@ -423,11 +424,12 @@ async def verify_login(request: LoginVerifyRequest):
 
 @app.get("/api/download/zip")
 async def download_videos_zip(phone: str, channel: str, background_tasks: BackgroundTasks):
-    """Download all channel videos into a ZIP file and return it."""
+    """Create a ZIP from the already-downloaded files for this account/channel."""
     if not phone.startswith("+"):
         phone = "+" + phone
 
     session_path = os.path.join(SESSIONS_DIR, phone)
+    download_root = os.path.join(DOWNLOAD_DIR, phone.lstrip("+"))
     if not os.path.exists(session_path + ".session"):
         raise HTTPException(
             status_code=401,
@@ -454,20 +456,33 @@ async def download_videos_zip(phone: str, channel: str, background_tasks: Backgr
 
             entity = await client.get_entity(channel)
             channel_name = sanitize_filename(getattr(entity, "title", "channel"))
-            temp_dir = tempfile.mkdtemp(prefix=f"zip_{channel_name}_", dir=DOWNLOAD_DIR)
-            zip_filename = f"{channel_name}_videos_{int(time.time())}.zip"
-            zip_path = os.path.join(DOWNLOAD_DIR, zip_filename)
-
-            video_count = 0
-            async for message in client.iter_messages(entity):
-                if message.video:
-                    await client.download_media(message, file=temp_dir)
-                    video_count += 1
-
-            if video_count == 0:
+            channel_folder = os.path.join(download_root, channel_name)
+            if not os.path.exists(channel_folder):
                 raise HTTPException(
                     status_code=404,
-                    detail="No videos found in the requested channel."
+                    detail="No downloaded files found for this channel."
+                )
+
+            temp_dir = tempfile.mkdtemp(prefix=f"zip_{channel_name}_", dir=download_root)
+            zip_filename = f"{channel_name}_videos_{int(time.time())}.zip"
+            zip_path = os.path.join(download_root, zip_filename)
+
+            file_count = 0
+            for root, _, files in os.walk(channel_folder):
+                for file_name in files:
+                    source_path = os.path.join(root, file_name)
+                    if source_path.endswith("downloaded_ids.json"):
+                        continue
+                    relative_path = os.path.relpath(source_path, channel_folder)
+                    target_path = os.path.join(temp_dir, relative_path)
+                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                    shutil.copy2(source_path, target_path)
+                    file_count += 1
+
+            if file_count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No downloaded media files found for this channel."
                 )
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:

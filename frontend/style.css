@@ -219,6 +219,112 @@ label {
     background-color: #229954;
 }
 
+.selection-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.select-all-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #fbfbfb;
+    cursor: pointer;
+    user-select: none;
+}
+
+.select-all-label input[type="checkbox"] {
+    accent-color: var(--primary-color);
+}
+
+.selection-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.selection-info {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.selection-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.selection-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ffffff, #f8fbff);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.selection-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(0, 136, 204, 0.08);
+}
+
+.selection-item input[type="checkbox"] {
+    margin-top: 4px;
+    accent-color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.selection-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.selection-title {
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.selection-meta {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.selection-footer {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.download-path {
+    margin-top: 6px;
+}
+
+.summary-actions {
+    display: grid;
+    gap: 10px;
+}
+
+.summary-actions .btn {
+    margin-top: 0;
+}
+
 /* Account Controls */
 .account-controls {
     display: flex;
