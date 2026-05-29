@@ -101,8 +101,9 @@ def format_size(bytes_size: float) -> str:
 class DownloadProgressTracker:
     """Track download progress and statistics"""
 
-    def __init__(self, on_progress: Optional[Callable] = None):
+    def __init__(self, on_progress: Optional[Callable] = None, meta: Optional[Dict] = None):
         self.on_progress = on_progress
+        self.meta = meta or {}
         self.start_time = time.monotonic()
         self.last_update = self.start_time
 
@@ -126,6 +127,7 @@ class DownloadProgressTracker:
             "speed_mbps": speed_mbps,
             "eta": format_time(eta_seconds),
         }
+        progress_data.update(self.meta)
 
         if self.on_progress:
             self.on_progress(progress_data)
@@ -169,7 +171,17 @@ class TelegramDownloader:
         if getattr(message, "file", None):
             file_size = message.file.size or 0
 
-        tracker = DownloadProgressTracker(progress_callback)
+        media_type = get_media_type(message)
+        tracker = DownloadProgressTracker(
+            progress_callback,
+            meta={
+                "current_item_id": message.id,
+                "current_item_label": f"{media_type.title() if media_type else 'File'} #{message.id}",
+                "current_item_caption": (getattr(message, "message", "") or "")[:120],
+                "item_index": item_index,
+                "total_items": total_items,
+            },
+        )
 
         try:
             if not self.client.is_connected():
@@ -185,7 +197,6 @@ class TelegramDownloader:
                 downloaded_ids.add(message.id)
                 save_downloaded_ids(channel_folder, downloaded_ids)
 
-                media_type = get_media_type(message)
                 if media_type == "video":
                     stats["video_count"] += 1
                 elif media_type == "photo":

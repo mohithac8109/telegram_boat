@@ -534,6 +534,16 @@ function updateProgress(progress) {
         progress.current_mb.toFixed(2) + ' / ' + progress.total_mb.toFixed(2) + ' MB';
 
     document.getElementById('statusMsg').textContent = 'Downloading...';
+    const currentItemMsg = document.getElementById('currentItemMsg');
+    if (currentItemMsg) {
+        const parts = [];
+        if (progress.current_item_label) parts.push(progress.current_item_label);
+        if (progress.current_item_caption) parts.push(progress.current_item_caption);
+        if (progress.item_index && progress.total_items) {
+            parts.push(`Item ${progress.item_index} of ${progress.total_items}`);
+        }
+        currentItemMsg.textContent = parts.length ? parts.join(' · ') : 'Downloading current file...';
+    }
 }
 
 function completeDownload(stats) {
@@ -558,6 +568,11 @@ function completeDownload(stats) {
         downloadZipBtn.disabled = false;
         downloadZipBtn.textContent = 'Download ZIP';
         downloadZipBtn.style.display = 'block';
+    }
+
+    const currentItemMsg = document.getElementById('currentItemMsg');
+    if (currentItemMsg) {
+        currentItemMsg.textContent = 'Download completed.';
     }
 
     // refresh history for the selected account
