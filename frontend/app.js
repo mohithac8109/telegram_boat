@@ -21,6 +21,7 @@ const verifyBtn = document.getElementById('verifyBtn');
 const backBtn = document.getElementById('backBtn');
 const channelInput = document.getElementById('channelInput');
 const startDownloadBtn = document.getElementById('startDownloadBtn');
+const downloadZipBtn = document.getElementById('downloadZipBtn');
 const newDownloadBtn = document.getElementById('newDownloadBtn');
 
 // Sections
@@ -47,6 +48,7 @@ function attachEventListeners() {
     backBtn.addEventListener('click', backToPhone);
     accountSelect.addEventListener('change', selectAccount);
     startDownloadBtn.addEventListener('click', startDownload);
+    downloadZipBtn.addEventListener('click', downloadZip);
     newDownloadBtn.addEventListener('click', () => {
         downloadSection.style.display = 'block';
         progressSection.style.display = 'none';
@@ -244,6 +246,31 @@ async function startDownload() {
         startDownloadBtn.disabled = false;
         startDownloadBtn.textContent = 'Start Download';
     }
+}
+
+function downloadZip() {
+    const channel = channelInput.value.trim();
+
+    if (!channel) {
+        alert('Please enter a channel name or link');
+        return;
+    }
+
+    if (!currentPhone) {
+        alert('Please select an account first');
+        return;
+    }
+
+    downloadZipBtn.disabled = true;
+    downloadZipBtn.textContent = 'Preparing ZIP...';
+
+    const zipUrl = `${API_URL}/download/zip?phone=${encodeURIComponent(currentPhone)}&channel=${encodeURIComponent(channel)}`;
+    window.location.href = zipUrl;
+
+    setTimeout(() => {
+        downloadZipBtn.disabled = false;
+        downloadZipBtn.textContent = 'Download Videos ZIP';
+    }, 1000);
 }
 
 async function pollDownloadStatus() {

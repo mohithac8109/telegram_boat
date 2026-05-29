@@ -3,7 +3,13 @@ FastAPI Backend for Telegram Media Downloader
 Provides REST API endpoints for authentication and media downloads
 """
 
+import asyncio
+import glob
 import os
+import shutil
+import tempfile
+import time
+import zipfile
 import uuid
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -38,6 +44,13 @@ app.add_middleware(
 # In-memory job tracking
 jobs: Dict[str, Dict] = {}
 clients: Dict[str, TelegramClient] = {}
+session_locks: Dict[str, asyncio.Lock] = {}
+
+
+def get_session_lock(phone: str) -> asyncio.Lock:
+    if phone not in session_locks:
+        session_locks[phone] = asyncio.Lock()
+    return session_locks[phone]
 
 
 # Models
@@ -69,38 +82,74 @@ def get_saved_accounts() -> List[str]:
     return sorted(accounts)
 
 
+def sanitize_filename(name: str) -> str:
+    name = name.strip()
+    if not name:
+        return 'channel'
+    safe = ''.join(c for c in name if c.isalnum() or c in (' ', '_', '-')).strip()
+    return safe or 'channel'
+
+
 async def download_worker(
-    job_id: str, client: TelegramClient, channel: str, choice: str
+    job_id: str,
+    phone: str,
+    channel: str,
+    choice: str,
 ):
     """Background worker for downloads"""
+    session_path = os.path.join(SESSIONS_DIR, phone)
+    lock = get_session_lock(phone)
+
     try:
-        print("=" * 50)
-        print("WORKER STARTED")
-        print("JOB:", job_id)
-        print("CHANNEL:", channel)
-        print("=" * 50)
+        async with lock:
+            print("=" * 50)
+            print("WORKER STARTED")
+            print("JOB:", job_id)
+            print("CHANNEL:", channel)
+            print("PHONE:", phone)
+            print("=" * 50)
 
-        jobs[job_id]["status"] = "scanning"
+            jobs[job_id]["status"] = "scanning"
 
-        downloader = TelegramDownloader(
-            client=client,
-            download_dir=DOWNLOAD_DIR,
-            concurrent_workers=1,
-        )
+            client = TelegramClient(
+                session_path,
+                API_ID,
+                API_HASH,
+                connection_retries=10,
+                retry_delay=2,
+            )
 
-        def progress_update(progress_data: Dict):
-            if job_id in jobs:
-                jobs[job_id]["progress"] = progress_data
+            try:
+                await client.connect()
 
-        result = await downloader.download_channel(
-            channel=channel,
-            choice=choice,
-            progress_callback=progress_update,
-        )
+                if not await client.is_user_authorized():
+                    raise RuntimeError("Session expired during download")
 
-        jobs[job_id]["status"] = "completed" if result.get("success") else "failed"
-        jobs[job_id]["result"] = result
-        jobs[job_id]["stats"] = result.get("stats", {})
+                downloader = TelegramDownloader(
+                    client=client,
+                    download_dir=DOWNLOAD_DIR,
+                    concurrent_workers=1,
+                )
+
+                def progress_update(progress_data: Dict):
+                    if job_id in jobs:
+                        jobs[job_id]["progress"] = progress_data
+
+                result = await downloader.download_channel(
+                    channel=channel,
+                    choice=choice,
+                    progress_callback=progress_update,
+                )
+
+                jobs[job_id]["status"] = "completed" if result.get("success") else "failed"
+                jobs[job_id]["result"] = result
+                jobs[job_id]["stats"] = result.get("stats", {})
+
+            finally:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
     except Exception as e:
         import traceback
@@ -147,7 +196,6 @@ async def get_accounts():
     }
 @app.post("/api/login")
 async def login(request: LoginRequest):
-    import asyncio
     from telethon.errors import AuthRestartError
 
     phone = request.phone.strip()
@@ -159,32 +207,15 @@ async def login(request: LoginRequest):
     if phone in clients:
         try:
             await clients[phone].disconnect()
-        except:
+        except Exception:
             pass
         clients.pop(phone, None)
 
     session_path = os.path.join(SESSIONS_DIR, phone)
+    lock = get_session_lock(phone)
 
     try:
-        client = TelegramClient(
-            session_path,
-            API_ID,
-            API_HASH,
-            connection_retries=10,
-            retry_delay=2,
-        )
-
-        try:
-            if not client.is_connected():
-                await client.connect()
-
-            await client.send_code_request(phone)
-
-        except AuthRestartError:
-            print("Telegram requested auth restart")
-
-            await client.disconnect()
-
+        async with lock:
             client = TelegramClient(
                 session_path,
                 API_ID,
@@ -193,13 +224,30 @@ async def login(request: LoginRequest):
                 retry_delay=2,
             )
 
-            await client.connect()
+            try:
+                if not client.is_connected():
+                    await client.connect()
 
-            await asyncio.sleep(2)
+                await client.send_code_request(phone)
 
-            await client.send_code_request(phone)
+            except AuthRestartError:
+                print("Telegram requested auth restart")
 
-        clients[phone] = client
+                await client.disconnect()
+
+                client = TelegramClient(
+                    session_path,
+                    API_ID,
+                    API_HASH,
+                    connection_retries=10,
+                    retry_delay=2,
+                )
+
+                await client.connect()
+                await asyncio.sleep(2)
+                await client.send_code_request(phone)
+
+            clients[phone] = client
 
         return {
             "success": True,
@@ -237,41 +285,43 @@ async def verify_login(request: LoginVerifyRequest):
         )
 
     client = clients[phone]
+    lock = get_session_lock(phone)
 
     try:
-        try:
-            if request.password:
-                await client.sign_in(phone=phone, code=request.code, password=request.password)
-            else:
-                await client.sign_in(phone=phone, code=request.code)
-        except SessionPasswordNeededError:
-            return {
-                "success": False,
-                "requires_password": True,
-                "phone": phone,
-                "message": "2FA password required"
-            }
+        async with lock:
+            try:
+                if request.password:
+                    await client.sign_in(phone=phone, code=request.code, password=request.password)
+                else:
+                    await client.sign_in(phone=phone, code=request.code)
+            except SessionPasswordNeededError:
+                return {
+                    "success": False,
+                    "requires_password": True,
+                    "phone": phone,
+                    "message": "2FA password required"
+                }
 
-        if await client.is_user_authorized():
-            me = await client.get_me()
-            await client.disconnect()
-            clients.pop(phone, None)
+            if await client.is_user_authorized():
+                me = await client.get_me()
+                await client.disconnect()
+                clients.pop(phone, None)
 
-            return {
-                "success": True,
-                "phone": phone,
-                "user": {
-                    "first_name": me.first_name,
-                    "last_name": me.last_name,
-                    "username": me.username,
-                },
-                "message": "Login successful"
-            }
+                return {
+                    "success": True,
+                    "phone": phone,
+                    "user": {
+                        "first_name": me.first_name,
+                        "last_name": me.last_name,
+                        "username": me.username,
+                    },
+                    "message": "Login successful"
+                }
 
-        raise HTTPException(
-            status_code=400,
-            detail="Login failed"
-        )
+            raise HTTPException(
+                status_code=400,
+                detail="Login failed"
+            )
 
     except SessionPasswordNeededError:
         try:
@@ -301,6 +351,79 @@ async def verify_login(request: LoginVerifyRequest):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/download/zip")
+async def download_videos_zip(phone: str, channel: str, background_tasks: BackgroundTasks):
+    """Download all channel videos into a ZIP file and return it."""
+    if not phone.startswith("+"):
+        phone = "+" + phone
+
+    session_path = os.path.join(SESSIONS_DIR, phone)
+    if not os.path.exists(session_path + ".session"):
+        raise HTTPException(
+            status_code=401,
+            detail="Account not logged in"
+        )
+
+    lock = get_session_lock(phone)
+    async with lock:
+        client = TelegramClient(
+            session_path,
+            API_ID,
+            API_HASH,
+            connection_retries=10,
+            retry_delay=2,
+        )
+
+        try:
+            await client.connect()
+            if not await client.is_user_authorized():
+                raise HTTPException(
+                    status_code=401,
+                    detail="Session expired. Please login again."
+                )
+
+            entity = await client.get_entity(channel)
+            channel_name = sanitize_filename(getattr(entity, "title", "channel"))
+            temp_dir = tempfile.mkdtemp(prefix=f"zip_{channel_name}_", dir=DOWNLOAD_DIR)
+            zip_filename = f"{channel_name}_videos_{int(time.time())}.zip"
+            zip_path = os.path.join(DOWNLOAD_DIR, zip_filename)
+
+            video_count = 0
+            async for message in client.iter_messages(entity):
+                if message.video:
+                    await client.download_media(message, file=temp_dir)
+                    video_count += 1
+
+            if video_count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No videos found in the requested channel."
+                )
+
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for root, _, files in os.walk(temp_dir):
+                    for file_name in files:
+                        file_path = os.path.join(root, file_name)
+                        archive_name = os.path.relpath(file_path, temp_dir)
+                        zip_file.write(file_path, archive_name)
+
+            background_tasks.add_task(shutil.rmtree, temp_dir, True)
+            background_tasks.add_task(os.remove, zip_path)
+
+            return FileResponse(
+                zip_path,
+                filename=zip_filename,
+                media_type="application/zip",
+                background=background_tasks,
+            )
+
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
 
 @app.post("/api/download")
@@ -335,28 +458,36 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
         "stats": None,
     }
 
-    try:
-        client = TelegramClient(
-            session_path,
-            API_ID,
-            API_HASH,
-            connection_retries=10,
-            retry_delay=2,
-        )
-        await client.connect()
+    lock = get_session_lock(phone)
 
-        if not await client.is_user_authorized():
-            jobs[job_id]["status"] = "failed"
-            jobs[job_id]["error"] = "Session expired"
-            raise HTTPException(
-                status_code=401,
-                detail="Session expired. Please login again."
+    try:
+        async with lock:
+            client = TelegramClient(
+                session_path,
+                API_ID,
+                API_HASH,
+                connection_retries=10,
+                retry_delay=2,
             )
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    jobs[job_id]["status"] = "failed"
+                    jobs[job_id]["error"] = "Session expired"
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Session expired. Please login again."
+                    )
+            finally:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
         background_tasks.add_task(
             download_worker,
             job_id,
-            client,
+            phone,
             request.channel,
             request.download_type,
         )
@@ -399,10 +530,12 @@ async def logout(request: LoginRequest):
     if not phone.startswith("+"):
         phone = "+" + phone
 
-    session_path = os.path.join(SESSIONS_DIR, phone + ".session")
-
-    if os.path.exists(session_path):
-        os.remove(session_path)
+    session_glob = os.path.join(SESSIONS_DIR, phone + ".session*")
+    for path in glob.glob(session_glob):
+        try:
+            os.remove(path)
+        except Exception:
+            pass
 
     return {
         "success": True,
