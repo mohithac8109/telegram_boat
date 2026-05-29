@@ -212,10 +212,23 @@ class TelegramDownloader:
         Returns:
             dict: Statistics and results
         """
+        print("=" * 50)
+        print("STEP 1 - DOWNLOAD STARTED")
+        print("CHANNEL:", channel)
+        print("TYPE:", choice)
+        print("=" * 50)
+
         try:
+            print("STEP 2 - GETTING ENTITY")
             entity = await self.client.get_entity(channel)
-        except ChannelInvalidError:
-            return {"error": "Invalid channel or not authorized"}
+            print("STEP 3 - ENTITY FOUND")
+            print("TITLE:", getattr(entity, "title", "Unknown"))
+        except Exception as e:
+            print("ENTITY ERROR:", str(e))
+            return {
+                "success": False,
+                "message": str(e),
+            }
 
         channel_name = getattr(entity, "title", "Unknown_Channel")
         channel_name = "".join(
@@ -224,6 +237,8 @@ class TelegramDownloader:
         )
 
         channel_folder = os.path.join(self.download_dir, channel_name)
+        
+        print("STEP 4 - CREATING FOLDER")
         os.makedirs(channel_folder, exist_ok=True)
 
         downloaded_ids = load_downloaded_ids(channel_folder)
@@ -245,13 +260,9 @@ class TelegramDownloader:
             "failed_count": 0,
         }
 
-        total_matches = await self.count_media(entity, choice)
-        if total_matches == 0:
-            return {
-                "success": False,
-                "message": f"No {label} found in channel",
-                "stats": stats,
-            }
+        print("STEP 5 - STARTING MESSAGE SCAN")
+        # Skip expensive full-channel scan
+        total_matches = 0
 
         queue: asyncio.Queue = asyncio.Queue(maxsize=20)
         id_lock = asyncio.Lock()
@@ -295,8 +306,15 @@ class TelegramDownloader:
         async for message in self.client.iter_messages(entity):
             if media_matches(message, choice):
                 item_index += 1
+                total_matches += 1
+                
+                if item_index % 100 == 0:
+                    print(f"FOUND {item_index} MATCHING FILES")
+                
                 await queue.put((message, item_index))
 
+        print(f"STEP 6 - SCAN COMPLETE. FOUND {item_index} FILES")
+        
         for _ in workers:
             await queue.put(None)
 
