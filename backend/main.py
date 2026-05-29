@@ -691,6 +691,39 @@ async def logout(request: LoginRequest):
         "message": "Logged out successfully"
     }
 
+@app.get("/debug/storage")
+def debug_storage():
+    result = {
+        "cwd": os.getcwd(),
+        "backend_exists": os.path.exists("backend"),
+        "downloads_exists": os.path.exists("backend/downloads"),
+        "download_dir_config": DOWNLOAD_DIR,
+    }
+
+    if os.path.exists("backend/downloads"):
+        try:
+            result["downloads"] = os.listdir("backend/downloads")
+        except Exception as e:
+            result["downloads_error"] = str(e)
+
+    # also check configured absolute download dir
+    try:
+        if os.path.exists(DOWNLOAD_DIR):
+            result["configured_downloads"] = os.listdir(DOWNLOAD_DIR)
+    except Exception as e:
+        result["configured_downloads_error"] = str(e)
+
+    return result
+
+
+@app.get("/debug/tree")
+def debug_tree():
+    files = []
+    for root, dirs, filenames in os.walk("."):
+        if "downloads" in root:
+            files.append(root)
+    return {"paths": files}
+
 
 if __name__ == "__main__":
     import uvicorn
