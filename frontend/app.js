@@ -228,7 +228,7 @@ function showError(message) {
 
 // Download Functions
 async function startDownload(messageIds = null) {
-    const channel = channelInput.value.trim();
+    const channel = (currentChannel || channelInput.value.trim()).trim();
     const downloadType = document.querySelector('input[name="downloadType"]:checked').value;
 
     if (!channel) {
@@ -263,6 +263,8 @@ async function startDownload(messageIds = null) {
         const data = await response.json();
 
         if (response.ok) {
+            currentChannel = channel;
+            channelInput.value = channel;
             currentJobId = data.job_id;
             downloadSection.style.display = 'none';
             selectionSection.style.display = 'none';
@@ -301,7 +303,6 @@ async function scanChannel() {
 
     scanChannelBtn.disabled = true;
     scanChannelBtn.textContent = 'Scanning...';
-    currentChannel = channel;
     currentDownloadType = downloadType;
     downloadSection.style.display = 'none';
     selectionSection.style.display = 'block';
@@ -317,6 +318,8 @@ async function scanChannel() {
         const data = await response.json();
 
         if (response.ok && data.success) {
+            currentChannel = channel;
+            channelInput.value = channel;
             selectionItems = data.items;
             if (selectionItems.length === 0) {
                 selectionInfo.textContent = 'No matching media found in this channel.';
@@ -329,11 +332,13 @@ async function scanChannel() {
             selectionInfo.textContent = `Found ${selectionItems.length} items. Select files to download or download all.`;
         } else {
             selectionInfo.textContent = data.detail || 'Failed to scan channel.';
+            currentChannel = null;
             downloadSection.style.display = 'block';
             selectionSection.style.display = 'none';
         }
     } catch (error) {
         selectionInfo.textContent = 'Error scanning channel: ' + error.message;
+        currentChannel = null;
         downloadSection.style.display = 'block';
         selectionSection.style.display = 'none';
     } finally {
