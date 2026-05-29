@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Telegram Media Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0088cc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📥 Telegram Media Manager</h1>
+            <p class="subtitle">Download videos, photos, documents & audio from channels</p>
+        </header>
+
+        <main>
+            <!-- Account Selection -->
+            <section class="card" id="accountSection">
+                <h2>Select Account</h2>
+                <div class="account-controls">
+                    <select id="accountSelect" class="input-field">
+                        <option value="">-- Select Account --</option>
+                    </select>
+                    <button id="loginBtn" class="btn btn-primary">Add New Account</button>
+                </div>
+            </section>
+
+            <!-- Login Modal -->
+            <div id="loginModal" class="modal hidden">
+                <div class="modal-content">
+                    <span class="close">&times;</span>
+                    <h2>Login to Telegram</h2>
+                    
+                    <div id="phoneStep" class="step">
+                        <label>Phone Number</label>
+                        <input type="tel" id="phoneInput" class="input-field" placeholder="+91 98765 43210">
+                        <button id="sendOtpBtn" class="btn btn-primary">Send OTP</button>
+                    </div>
+
+                    <div id="otpStep" class="step hidden">
+                        <label>Verification Code</label>
+                        <p class="hint">Check your Telegram app for the code</p>
+                        <input type="text" id="codeInput" class="input-field" placeholder="12345">
+                        <button id="verifyBtn" class="btn btn-primary">Verify</button>
+                        <button id="backBtn" class="btn btn-secondary">Back</button>
+                    </div>
+
+                    <div id="successStep" class="step hidden">
+                        <div class="success-icon">✓</div>
+                        <p id="successMsg"></p>
+                        <button id="closeLoginBtn" class="btn btn-primary">Done</button>
+                    </div>
+
+                    <div id="errorMsg" class="error hidden"></div>
+                </div>
+            </div>
+
+            <!-- Download Section -->
+            <section class="card" id="downloadSection" style="display: none;">
+                <h2>Download Settings</h2>
+
+                <!-- Channel Input -->
+                <div class="form-group">
+                    <label>Channel Username or Link</label>
+                    <input type="text" id="channelInput" class="input-field" 
+                           placeholder="@channelname or https://t.me/channelname">
+                </div>
+
+                <!-- Download Type -->
+                <div class="form-group">
+                    <label>Download Type</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="downloadType" value="1"> Videos Only
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="downloadType" value="2"> Photos Only
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="downloadType" value="3"> Documents Only
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="downloadType" value="4"> Audio Only
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="downloadType" value="5" checked> Everything
+                        </label>
+                    </div>
+                </div>
+
+                <button id="startDownloadBtn" class="btn btn-success">Start Download</button>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="card" id="progressSection" style="display: none;">
+                <h2>Download Progress</h2>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div id="progressPercent" class="progress-percent">0%</div>
+                </div>
+
+                <div class="progress-stats">
+                    <div class="stat">
+                        <span class="label">Speed</span>
+                        <span id="speedStat" class="value">-- MB/s</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">ETA</span>
+                        <span id="etaStat" class="value">--:--</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Progress</span>
+                        <span id="sizeStat" class="value">-- / --</span>
+                    </div>
+                </div>
+
+                <div id="statusMsg" class="status-message">Scanning channel...</div>
+            </section>
+
+            <!-- Summary Section -->
+            <section class="card" id="summarySection" style="display: none;">
+                <h2>Download Complete</h2>
+
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="label">Total Files</span>
+                        <span id="totalFiles" class="value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Videos</span>
+                        <span id="videoCount" class="value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Photos</span>
+                        <span id="photoCount" class="value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Documents</span>
+                        <span id="docCount" class="value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Audio</span>
+                        <span id="audioCount" class="value">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Total Size</span>
+                        <span id="totalSize" class="value">0 GB</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Time Taken</span>
+                        <span id="timeTaken" class="value">--:--:--</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Avg Speed</span>
+                        <span id="avgSpeed" class="value">0 MB/s</span>
+                    </div>
+                </div>
+
+                <div id="downloadPath" class="download-path"></div>
+
+                <button id="newDownloadBtn" class="btn btn-primary">New Download</button>
+            </section>
+        </main>
+
+        <footer>
+            <p>Telegram Media Manager v1.0 | Made with ❤️</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service worker registered.', reg))
+                    .catch(err => console.warn('Service worker registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>

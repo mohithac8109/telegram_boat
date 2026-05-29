@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.TelegramMediaShell" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#1E88E5</item>
+        <item name="colorPrimaryVariant">#1565C0</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#0D47A1</item>
+    </style>
+</resources>

@@ -1,0 +1,10 @@
+{
+  "name": "Telegram Media Manager",
+  "short_name": "Media Manager",
+  "description": "Download Telegram channel media from your tablet or phone.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0088cc",
+  "theme_color": "#0088cc"
+}
+
